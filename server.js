@@ -6,18 +6,18 @@ const server = new WebSocket.Server({
 
 const rooms = {};
 
-// =========================
+// =========================================================
 // HELPERS
-// =========================
+// =========================================================
 function send(ws, data) {
 	if (ws.readyState === WebSocket.OPEN) {
 		ws.send(JSON.stringify(data));
 	}
 }
 
-// =========================
+// =========================================================
 // CONNECTION
-// =========================
+// =========================================================
 server.on("connection", (ws) => {
 
 	ws.roomId = null;
@@ -55,10 +55,10 @@ server.on("connection", (ws) => {
 
 			ws.playerId = "p" + room.players.length;
 
-			console.log("[SERVER] Player joined:", ws.playerId, ws.carType);
+			console.log("[SERVER] Player:", ws.playerId, "Car:", ws.carType);
 
 			// =========================================================
-			// 1. SEND ROOM CONFIRMATION (NO SPAWN DATA HERE)
+			// 1. ROOM JOIN (NO CAR DATA HERE)
 			// =========================================================
 			send(ws, {
 				type: "room_joined",
@@ -67,24 +67,24 @@ server.on("connection", (ws) => {
 			});
 
 			// =========================================================
-			// 2. SEND SPAWN PACKET TO THIS PLAYER
+			// 2. SPAWN SELF
 			// =========================================================
 			send(ws, {
 				type: "spawn",
 				player_id: ws.playerId,
-				car_type: ws.carType,
+				car_type: ws.carType,   // ✅ FIXED
 				is_local: true
 			});
 
 			// =========================================================
-			// 3. NOTIFY OTHER PLAYERS
+			// 3. SPAWN OTHER PLAYERS
 			// =========================================================
 			for (let other of room.players) {
 				if (other !== ws) {
 					send(other, {
 						type: "spawn",
 						player_id: ws.playerId,
-						car_type: ws.carType,
+						car_type: ws.carType,   // ✅ FIXED
 						is_local: false
 					});
 				}
