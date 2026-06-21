@@ -7,7 +7,7 @@ const server = new WebSocket.Server({
 const rooms = {};
 
 // =========================================================
-// HELPERS
+// SEND HELPER
 // =========================================================
 function send(ws, data) {
 	if (ws.readyState === WebSocket.OPEN) {
@@ -39,7 +39,7 @@ server.on("connection", (ws) => {
 		if (data.type === "create_or_join") {
 
 			ws.roomId = data.roomId;
-			ws.carType = data.car_id;
+			ws.carType = data.car_id || "";
 			ws.scene = data.scene;
 
 			if (!rooms[ws.roomId]) {
@@ -55,10 +55,14 @@ server.on("connection", (ws) => {
 
 			ws.playerId = "p" + room.players.length;
 
-			console.log("[SERVER] Player:", ws.playerId, "Car:", ws.carType);
+			console.log("==================================");
+			console.log("[SERVER] Player joined:", ws.playerId);
+			console.log("[SERVER] Car:", ws.carType);
+			console.log("[SERVER] Room:", ws.roomId);
+			console.log("==================================");
 
 			// =========================================================
-			// 1. ROOM JOIN (NO CAR DATA HERE)
+			// 1. ROOM JOIN (NO CAR DATA)
 			// =========================================================
 			send(ws, {
 				type: "room_joined",
@@ -72,20 +76,31 @@ server.on("connection", (ws) => {
 			send(ws, {
 				type: "spawn",
 				player_id: ws.playerId,
-				car_type: ws.carType,   // ✅ FIXED
+				car_type: ws.carType,
 				is_local: true
 			});
 
+			console.log("[SERVER] SPAWN SELF SENT:", {
+				player_id: ws.playerId,
+				car_type: ws.carType
+			});
+
 			// =========================================================
-			// 3. SPAWN OTHER PLAYERS
+			// 3. SPAWN FOR OTHER PLAYERS
 			// =========================================================
 			for (let other of room.players) {
 				if (other !== ws) {
+
 					send(other, {
 						type: "spawn",
 						player_id: ws.playerId,
-						car_type: ws.carType,   // ✅ FIXED
+						car_type: ws.carType,
 						is_local: false
+					});
+
+					console.log("[SERVER] SPAWN OTHER SENT:", {
+						player_id: ws.playerId,
+						car_type: ws.carType
 					});
 				}
 			}
