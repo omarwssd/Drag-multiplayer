@@ -4,9 +4,6 @@ const server = new WebSocket.Server({
 	port: process.env.PORT || 10000
 });
 
-// =========================
-// ROOMS
-// =========================
 const rooms = {};
 
 // =========================
@@ -26,8 +23,6 @@ server.on("connection", (ws) => {
 	ws.roomId = null;
 	ws.carType = null;
 	ws.playerId = null;
-	ws.displayName = "Guest";
-	ws.scene = null;
 
 	ws.on("message", (msg) => {
 
@@ -44,44 +39,57 @@ server.on("connection", (ws) => {
 		if (data.type === "create_or_join") {
 
 			ws.roomId = data.roomId;
+			ws.carType = data.car_id;
 			ws.scene = data.scene;
 
-			// ✅ FIX: correct field from client
-			ws.carType = data.car_id;
-
-			if (!ws.roomId) return;
-
-			// create room if missing
 			if (!rooms[ws.roomId]) {
 				rooms[ws.roomId] = {
 					scene: ws.scene,
-					players: new Set()
+					players: []
 				};
 			}
 
-			rooms[ws.roomId].players.add(ws);
+			const room = rooms[ws.roomId];
 
-			console.log("[SERVER] ROOM JOIN:", ws.roomId);
-			console.log("[SERVER] SCENE:", ws.scene);
-			console.log("[SERVER] CAR RECEIVED:", ws.carType);
+			room.players.push(ws);
 
-			// send confirmation
+			ws.playerId = "p" + room.players.length;
+
+			console.log("[SERVER] Player joined:", ws.playerId, ws.carType);
+
+			// =========================================================
+			// 1. SEND ROOM CONFIRMATION (NO SPAWN DATA HERE)
+			// =========================================================
 			send(ws, {
 				type: "room_joined",
 				roomId: ws.roomId,
-				scene: ws.scene,
-				car_type: ws.carType
+				scene: ws.scene
 			});
 
-			return;
-		}
+			// =========================================================
+			// 2. SEND SPAWN PACKET TO THIS PLAYER
+			// =========================================================
+			send(ws, {
+				type: "spawn",
+				player_id: ws.playerId,
+				car_type: ws.carType,
+				is_local: true
+			});
 
-		// =========================================================
-		// SET IDENTITY (optional future use)
-		// =========================================================
-		if (data.type === "set_identity") {
-			ws.playerId = data.data.player_id;
-			ws.displayName = data.data.display_name;
+			// =========================================================
+			// 3. NOTIFY OTHER PLAYERS
+			// =========================================================
+			for (let other of room.players) {
+				if (other !== ws) {
+					send(other, {
+						type: "spawn",
+						player_id: ws.playerId,
+						car_type: ws.carType,
+						is_local: false
+					});
+				}
+			}
+
 			return;
 		}
 	});
@@ -93,11 +101,13 @@ server.on("connection", (ws) => {
 
 		if (!ws.roomId || !rooms[ws.roomId]) return;
 
-		rooms[ws.roomId].players.delete(ws);
+		let room = rooms[ws.roomId];
 
-		if (rooms[ws.roomId].players.size === 0) {
+		room.players = room.players.filter(p => p !== ws);
+
+		if (room.players.length === 0) {
 			delete rooms[ws.roomId];
-			console.log("[SERVER] Deleted empty room:", ws.roomId);
+			console.log("[SERVER] Room deleted:", ws.roomId);
 		}
 	});
 });
