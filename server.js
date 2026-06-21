@@ -42,6 +42,11 @@ server.on("connection", (ws) => {
 			ws.carType = data.car_id || "";
 			ws.scene = data.scene;
 
+			if (ws.carType === "") {
+				console.log("❌ REJECTED: empty car_id");
+				return;
+			}
+
 			if (!rooms[ws.roomId]) {
 				rooms[ws.roomId] = {
 					scene: ws.scene,
@@ -55,14 +60,14 @@ server.on("connection", (ws) => {
 
 			ws.playerId = "p" + room.players.length;
 
-			console.log("==================================");
-			console.log("[SERVER] Player joined:", ws.playerId);
+			console.log("================================");
+			console.log("[SERVER] Player:", ws.playerId);
 			console.log("[SERVER] Car:", ws.carType);
 			console.log("[SERVER] Room:", ws.roomId);
-			console.log("==================================");
+			console.log("================================");
 
 			// =========================================================
-			// 1. ROOM JOIN (NO CAR DATA)
+			// ROOM JOIN (NO CAR DATA)
 			// =========================================================
 			send(ws, {
 				type: "room_joined",
@@ -71,7 +76,15 @@ server.on("connection", (ws) => {
 			});
 
 			// =========================================================
-			// 2. SPAWN SELF
+			// STORE PLAYER DATA IN ROOM (IMPORTANT FIX)
+			// =========================================================
+			ws.spawnData = {
+				player_id: ws.playerId,
+				car_type: ws.carType
+			};
+
+			// =========================================================
+			// SPAWN SELF
 			// =========================================================
 			send(ws, {
 				type: "spawn",
@@ -80,16 +93,11 @@ server.on("connection", (ws) => {
 				is_local: true
 			});
 
-			console.log("[SERVER] SPAWN SELF SENT:", {
-				player_id: ws.playerId,
-				car_type: ws.carType
-			});
-
 			// =========================================================
-			// 3. SPAWN FOR OTHER PLAYERS
+			// SPAWN OTHER PLAYERS
 			// =========================================================
 			for (let other of room.players) {
-				if (other !== ws) {
+				if (other !== ws && other.spawnData) {
 
 					send(other, {
 						type: "spawn",
@@ -98,9 +106,12 @@ server.on("connection", (ws) => {
 						is_local: false
 					});
 
-					console.log("[SERVER] SPAWN OTHER SENT:", {
-						player_id: ws.playerId,
-						car_type: ws.carType
+					// ALSO send existing player back to new player
+					send(ws, {
+						type: "spawn",
+						player_id: other.playerId,
+						car_type: other.carType,
+						is_local: false
 					});
 				}
 			}
