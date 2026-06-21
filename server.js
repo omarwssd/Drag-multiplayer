@@ -1,127 +1,140 @@
 const WebSocket = require("ws");
 
 const server = new WebSocket.Server({
-    port: process.env.PORT || 10000
+	port: process.env.PORT || 10000
 });
 
+// =========================
+// ROOMS
+// =========================
 const rooms = {};
-// structure:
-// rooms[roomId] = {
-//   players: Set(ws),
-//   scene: number
-// }
 
+// =========================
+// HELPERS
+// =========================
 function send(ws, data) {
-    if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(data));
-    }
+	if (ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify(data));
+	}
 }
 
-function broadcast(roomId, data) {
-    if (!rooms[roomId]) return;
+function broadcast(roomId, data, excludeWs = null) {
+	if (!rooms[roomId]) return;
 
-    for (const client of rooms[roomId].players) {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(data));
-        }
-    }
+	for (const client of rooms[roomId].players) {
+		if (client !== excludeWs && client.readyState === WebSocket.OPEN) {
+			client.send(JSON.stringify(data));
+		}
+	}
 }
 
+// =========================
+// CONNECTION
+// =========================
 server.on("connection", (ws) => {
-    ws.roomId = null;
+	ws.roomId = null;
 
-    ws.on("message", (msg) => {
-        let data;
+	// NEW PLAYER DATA (IMPORTANT)
+	ws.playerId = null;
+	ws.displayName = "Guest";
+	ws.carType = null;
 
-        try {
-            data = JSON.parse(msg);
-        } catch (e) {
-            return;
-        }
+	ws.on("message", (msg) => {
+		let data;
 
-        // =========================
-        // CREATE OR JOIN ROOM
-        // =========================
-        if (data.type === "create_or_join") {
-            const roomId = data.roomId;
-            const scene = data.scene;
+		try {
+			data = JSON.parse(msg);
+		} catch {
+			return;
+		}
 
-            if (!roomId) return;
+		// =====================================
+		// SET IDENTITY
+		// =====================================
+		if (data.type === "set_identity") {
+			ws.playerId = data.data.player_id;
+			ws.displayName = data.data.display_name;
+			return;
+		}
 
-            // =========================
-            // CREATE ROOM
-            // =========================
-            if (!rooms[roomId]) {
-                rooms[roomId] = {
-                    players: new Set(),
-                    scene: scene
-                };
+		// =====================================
+		// SET CAR (CAMERA SYSTEM)
+		// =====================================
+		if (data.type === "set_car_from_camera") {
+			ws.carType = data.car_id;
+			return;
+		}
 
-                rooms[roomId].players.add(ws);
-                ws.roomId = roomId;
+		// =====================================
+		// CREATE OR JOIN ROOM
+		// =====================================
+		if (data.type === "create_or_join") {
+			const roomId = data.roomId;
+			const scene = data.scene;
 
-                send(ws, {
-                    type: "room_created",
-                    roomId: roomId,
-                    scene: scene
-                });
+			if (!roomId) return;
 
-                console.log(`[SERVER] Room created: ${roomId} (scene ${scene})`);
-            }
+			// create room if not exists
+			if (!rooms[roomId]) {
+				rooms[roomId] = {
+					scene: scene,
+					players: new Set()
+				};
+			}
 
-            // =========================
-            // JOIN ROOM
-            // =========================
-            else {
-                rooms[roomId].players.add(ws);
-                ws.roomId = roomId;
+			rooms[roomId].players.add(ws);
+			ws.roomId = roomId;
 
-                send(ws, {
-                    type: "room_joined",
-                    roomId: roomId,
-                    scene: rooms[roomId].scene
-                });
+			// =========================
+			// SEND SELF DATA
+			// =========================
+			send(ws, {
+				type: "room_joined",
+				roomId: roomId,
+				scene: rooms[roomId].scene,
+				player_id: ws.playerId,
+				display_name: ws.displayName,
+				car_type: ws.carType
+			});
 
-                broadcast(roomId, {
-                    type: "player_joined"
-                });
+			// =========================
+			// NOTIFY OTHERS
+			// =========================
+			broadcast(roomId, {
+				type: "player_joined",
+				player_id: ws.playerId,
+				display_name: ws.displayName,
+				car_type: ws.carType
+			}, ws);
 
-                console.log(`[SERVER] Player joined: ${roomId}`);
-            }
-        }
+			console.log(
+				`[SERVER] ${ws.displayName} joined ${roomId} with ${ws.carType}`
+			);
+		}
+	});
 
-        // =========================
-        // FUTURE: GAME DATA (optional later)
-        // =========================
-        if (data.type === "update") {
-            if (!ws.roomId) return;
+	// =====================================
+	// DISCONNECT
+	// =====================================
+	ws.on("close", () => {
+		const roomId = ws.roomId;
 
-            broadcast(ws.roomId, {
-                type: "update",
-                data: data.data
-            });
-        }
-    });
+		if (!roomId || !rooms[roomId]) return;
 
-    // =========================
-    // DISCONNECT CLEANUP
-    // =========================
-    ws.on("close", () => {
-        const roomId = ws.roomId;
+		rooms[roomId].players.delete(ws);
 
-        if (!roomId || !rooms[roomId]) return;
+		// notify others
+		broadcast(roomId, {
+			type: "player_left",
+			player_id: ws.playerId
+		});
 
-        rooms[roomId].players.delete(ws);
-
-        if (rooms[roomId].players.size === 0) {
-            console.log(`[SERVER] Room deleted: ${roomId}`);
-            delete rooms[roomId];
-        } else {
-            broadcast(roomId, {
-                type: "player_left"
-            });
-        }
-    });
+		// delete empty room
+		if (rooms[roomId].players.size === 0) {
+			delete rooms[roomId];
+			console.log(`[SERVER] Deleted room ${roomId}`);
+		}
+	});
 });
 
-console.log("[SERVER] WebSocket running on port", process.env.PORT || 10000);
+console.log("[SERVER] Running on port", process.env.PORT || 10000);
