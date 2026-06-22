@@ -7,16 +7,12 @@ const server = new WebSocket.Server({
 const rooms = {};
 
 // =========================================================
-// SEND HELPER
-// =========================================================
 function send(ws, data) {
 	if (ws.readyState === WebSocket.OPEN) {
 		ws.send(JSON.stringify(data));
 	}
 }
 
-// =========================================================
-// CONNECTION
 // =========================================================
 server.on("connection", (ws) => {
 
@@ -43,7 +39,7 @@ server.on("connection", (ws) => {
 			ws.scene = data.scene;
 
 			if (ws.carType === "") {
-				console.log("❌ REJECTED: empty car_id");
+				console.log("❌ Missing car_id");
 				return;
 			}
 
@@ -57,7 +53,6 @@ server.on("connection", (ws) => {
 			const room = rooms[ws.roomId];
 
 			room.players.push(ws);
-
 			ws.playerId = "p" + room.players.length;
 
 			console.log("================================");
@@ -66,26 +61,44 @@ server.on("connection", (ws) => {
 			console.log("[SERVER] Room:", ws.roomId);
 			console.log("================================");
 
-			// =========================================================
-			// ROOM JOIN (NO CAR DATA)
-			// =========================================================
+			// ROOM JOIN
 			send(ws, {
 				type: "room_joined",
 				roomId: ws.roomId,
 				scene: ws.scene
 			});
 
-			// =========================================================
-			// STORE PLAYER DATA IN ROOM (IMPORTANT FIX)
-			// =========================================================
+			// STORE SPAWN DATA
 			ws.spawnData = {
 				player_id: ws.playerId,
 				car_type: ws.carType
 			};
 
-			// =========================================================
+			// SEND EXISTING PLAYERS TO NEW PLAYER
+			for (let other of room.players) {
+				if (other !== ws && other.spawnData) {
+					send(ws, {
+						type: "spawn",
+						player_id: other.playerId,
+						car_type: other.carType,
+						is_local: false
+					});
+				}
+			}
+
+			// SEND NEW PLAYER TO OTHERS
+			for (let other of room.players) {
+				if (other !== ws && other.spawnData) {
+					send(other, {
+						type: "spawn",
+						player_id: ws.playerId,
+						car_type: ws.carType,
+						is_local: false
+					});
+				}
+			}
+
 			// SPAWN SELF
-			// =========================================================
 			send(ws, {
 				type: "spawn",
 				player_id: ws.playerId,
@@ -93,25 +106,26 @@ server.on("connection", (ws) => {
 				is_local: true
 			});
 
-			// =========================================================
-			// SPAWN OTHER PLAYERS
-			// =========================================================
-			for (let other of room.players) {
-				if (other !== ws && other.spawnData) {
+			return;
+		}
 
-					send(other, {
-						type: "spawn",
+		// =========================================================
+		// 🚗 CAR MOVEMENT SYNC (NEW)
+		// =========================================================
+		if (data.type === "car_sync") {
+
+			const room = rooms[ws.roomId];
+			if (!room) return;
+
+			for (let player of room.players) {
+
+				if (player !== ws && player.spawnData) {
+
+					send(player, {
+						type: "car_sync",
 						player_id: ws.playerId,
-						car_type: ws.carType,
-						is_local: false
-					});
-
-					// ALSO send existing player back to new player
-					send(ws, {
-						type: "spawn",
-						player_id: other.playerId,
-						car_type: other.carType,
-						is_local: false
+						pos: data.pos,
+						rot: data.rot
 					});
 				}
 			}
