@@ -19,6 +19,7 @@ server.on("connection", (ws) => {
 	ws.roomId = null;
 	ws.carType = null;
 	ws.playerId = null;
+	ws.upgrades = null;
 
 	ws.on("message", (msg) => {
 
@@ -38,15 +39,19 @@ server.on("connection", (ws) => {
 			ws.carType = data.car_id || "";
 			ws.scene = data.scene;
 
-			if (ws.carType === "") {
-				console.log("❌ Missing car_id");
-				return;
-			}
+			// 🧠 STORE PLAYER UPGRADES (from config file sent by client)
+			ws.upgrades = data.stats || {
+				engine_power: 1400,
+				brake_power: 60,
+				max_rpm: 8000,
+				weight: 1200
+			};
 
 			if (!rooms[ws.roomId]) {
 				rooms[ws.roomId] = {
 					scene: ws.scene,
-					players: []
+					players: [],
+					race_started: false
 				};
 			}
 
@@ -59,24 +64,41 @@ server.on("connection", (ws) => {
 			console.log("[SERVER] Player:", ws.playerId);
 			console.log("[SERVER] Car:", ws.carType);
 			console.log("[SERVER] Room:", ws.roomId);
+			console.log("[SERVER] Upgrades:", ws.upgrades);
 			console.log("================================");
 
-			// ROOM JOIN
+			// =====================================================
+			// ROOM JOIN CONFIRM
+			// =====================================================
 			send(ws, {
 				type: "room_joined",
 				roomId: ws.roomId,
 				scene: ws.scene
 			});
 
+			// =====================================================
 			// STORE SPAWN DATA
+			// =====================================================
 			ws.spawnData = {
 				player_id: ws.playerId,
 				car_type: ws.carType
 			};
 
-			// SEND EXISTING PLAYERS TO NEW PLAYER
+			// =====================================================
+			// SPAWN SYNC (existing system unchanged)
+			// =====================================================
 			for (let other of room.players) {
 				if (other !== ws && other.spawnData) {
+
+					// send new player to others
+					send(other, {
+						type: "spawn",
+						player_id: ws.playerId,
+						car_type: ws.carType,
+						is_local: false
+					});
+
+					// send existing to new
 					send(ws, {
 						type: "spawn",
 						player_id: other.playerId,
@@ -86,19 +108,7 @@ server.on("connection", (ws) => {
 				}
 			}
 
-			// SEND NEW PLAYER TO OTHERS
-			for (let other of room.players) {
-				if (other !== ws && other.spawnData) {
-					send(other, {
-						type: "spawn",
-						player_id: ws.playerId,
-						car_type: ws.carType,
-						is_local: false
-					});
-				}
-			}
-
-			// SPAWN SELF
+			// spawn self
 			send(ws, {
 				type: "spawn",
 				player_id: ws.playerId,
@@ -106,11 +116,44 @@ server.on("connection", (ws) => {
 				is_local: true
 			});
 
+			// =====================================================
+			// 🚀 AUTO START RACE WHEN 2 PLAYERS
+			// =====================================================
+			if (room.players.length === 2 && !room.race_started) {
+
+				room.race_started = true;
+
+				const p1 = room.players[0];
+				const p2 = room.players[1];
+
+				// =================================================
+				// 🏁 RACE SNAPSHOT (THE IMPORTANT PART)
+				// =================================================
+
+				const snapshot = {
+					type: "race_start",
+					p1: {
+						player_id: p1.playerId,
+						stats: p1.upgrades
+					},
+					p2: {
+						player_id: p2.playerId,
+						stats: p2.upgrades
+					}
+				};
+
+				// send to both players
+				send(p1, snapshot);
+				send(p2, snapshot);
+
+				console.log("🏁 Race started with snapshot");
+			}
+
 			return;
 		}
 
 		// =========================================================
-		// 🚗 CAR MOVEMENT SYNC (NEW)
+		// CAR SYNC
 		// =========================================================
 		if (data.type === "car_sync") {
 
@@ -119,8 +162,7 @@ server.on("connection", (ws) => {
 
 			for (let player of room.players) {
 
-				if (player !== ws && player.spawnData) {
-
+				if (player !== ws) {
 					send(player, {
 						type: "car_sync",
 						player_id: ws.playerId,
