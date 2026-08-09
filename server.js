@@ -279,6 +279,46 @@ server.on("connection", (ws) => {
 
 
 
+// =====================================================
+		// CHRISTMAS TREE SYNC
+		// =====================================================
+
+		if (
+			data.type === "tree_start" ||
+			data.type === "tree_green"
+		) {
+
+			const room = rooms[ws.roomId];
+
+			if (!room)
+				return;
+
+
+			// Only the room creator (p1) can
+			// control the official tree sequence.
+
+			if (ws.playerId !== "p1")
+				return;
+
+
+			for (let player of room.players) {
+
+				if (player !== ws) {
+
+					send(player, {
+
+						type: data.type
+
+					});
+
+				}
+
+			}
+
+
+			return;
+		}
+
 	// =====================================================
 	// DISCONNECT
 	// =====================================================
