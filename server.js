@@ -280,6 +280,54 @@ server.on("connection", (ws) => {
 
 
 // =====================================================
+		// RACE RESULT SYNC
+		// =====================================================
+
+		if (data.type === "race_result") {
+
+			const room = rooms[ws.roomId];
+
+			if (!room)
+				return;
+
+
+			for (let player of room.players) {
+
+				if (player !== ws) {
+
+					send(player, {
+
+						type: "race_result",
+
+						player_id: data.player_id,
+
+						reaction: data.reaction,
+
+						"60ft": data["60ft"],
+
+						"330ft": data["330ft"],
+
+						"1_8": data["1_8"],
+
+						"1000ft": data["1000ft"],
+
+						"1_4": data["1_4"],
+
+						finish: data.finish,
+
+						trap_speed: data.trap_speed
+
+					});
+
+				}
+
+			}
+
+			return;
+		}
+
+
+// =====================================================
 		// CHRISTMAS TREE SYNC
 		// =====================================================
 
