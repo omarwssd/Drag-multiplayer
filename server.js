@@ -226,7 +226,9 @@ server.on("connection", (ws) => {
 
 				roomId: ws.roomId,
 
-				scene: ws.scene
+				scene: ws.scene,
+				
+				player_id: ws.playerId
 
 			});
 
