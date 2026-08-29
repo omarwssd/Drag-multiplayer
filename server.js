@@ -34,6 +34,7 @@ server.on("connection", (ws) => {
 	ws.roomId = null;
 	ws.carType = null;
 	ws.playerId = null;
+	ws.playerName = null;
 	ws.upgrades = null;
 	ws.spawnData = null;
 	ws.scene = null;
@@ -93,6 +94,13 @@ server.on("connection", (ws) => {
 
 			ws.roomId = data.roomId;
 			ws.carType = data.car_id || "";
+
+
+			// =============================================
+			// PLAYER NAME
+			// =============================================
+
+			ws.playerName = data.player_name || "Player";
 
 
 			// =============================================
@@ -192,6 +200,11 @@ server.on("connection", (ws) => {
 			);
 
 			console.log(
+				"[SERVER] Name:",
+				ws.playerName
+			);
+
+			console.log(
 				"[SERVER] Car:",
 				ws.carType
 			);
@@ -227,7 +240,7 @@ server.on("connection", (ws) => {
 				roomId: ws.roomId,
 
 				scene: ws.scene,
-				
+
 				player_id: ws.playerId
 
 			});
@@ -240,6 +253,8 @@ server.on("connection", (ws) => {
 			ws.spawnData = {
 
 				player_id: ws.playerId,
+
+				player_name: ws.playerName,
 
 				car_type: ws.carType
 
@@ -268,6 +283,8 @@ server.on("connection", (ws) => {
 
 						player_id: ws.playerId,
 
+						player_name: ws.playerName,
+
 						car_type: ws.carType,
 
 						is_local: false
@@ -284,6 +301,8 @@ server.on("connection", (ws) => {
 						type: "spawn",
 
 						player_id: other.playerId,
+
+						player_name: other.playerName,
 
 						car_type: other.carType,
 
@@ -305,6 +324,8 @@ server.on("connection", (ws) => {
 				type: "spawn",
 
 				player_id: ws.playerId,
+
+				player_name: ws.playerName,
 
 				car_type: ws.carType,
 
@@ -338,6 +359,10 @@ server.on("connection", (ws) => {
 
 						player_id: p1.playerId,
 
+						player_name: p1.playerName,
+
+						car_type: p1.carType,
+
 						stats: p1.upgrades
 
 					},
@@ -345,6 +370,10 @@ server.on("connection", (ws) => {
 					p2: {
 
 						player_id: p2.playerId,
+
+						player_name: p2.playerName,
+
+						car_type: p2.carType,
 
 						stats: p2.upgrades
 
